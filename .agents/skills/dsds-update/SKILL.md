@@ -21,12 +21,14 @@ Modify an existing `.dsds.yaml` file.
 
 | Change | Location in spec |
 | --- | --- |
-| New prop | `sourceFiles` already points at the real file — no spec edit needed, unless there's no source file, in which case update the `definitions` section titled "Props" |
+| New prop | `sourceFiles` already points at the real file — no spec edit needed, unless there's no source file, in which case update the `definitions` section standing in for it |
 | New variant value | Top-level `traits` item with `kind: enum`, in its `values` array |
-| New state | Top-level `traits` item with `kind: boolean` |
-| Anatomy change | The `definitions` section titled "Anatomy" |
-| New accessibility requirement | A `guidelines` item (`context: how-to-use`), or a `definitions` section titled "Keyboard interactions" |
+| New state | Top-level `traits` item with `kind: boolean`, `setBy: component` |
+| Component gains a generated API contract | Top-level `specs`, a ref with `rel: contract` |
+| Anatomy change | The `definitions` section with `context: anatomy` |
+| New accessibility requirement | A `guidelines` item (in a section with `framing: how-to-use`), or a `definitions` section with `context: keyboard` |
 | Status change | `metadata.status` (always an object: `{status: "..."}`) |
+| Regrouping into a family | `metadata.group` on each member |
 | New agent rule | A section with `for: agent` |
 
 ## Rules
@@ -44,8 +46,10 @@ Modify an existing `.dsds.yaml` file.
   fields that were already there just to comply; that turns a one-line edit
   into an unreviewable diff.
 - When adding trait values, place them in logical order (not necessarily alphabetical) — the first value is implied as the default.
+- Set `setBy` on any trait you add: `consumer` if the caller passes it in, `component` if the component sets it itself. Codegen depends on the distinction — a `component`-set trait must never become a prop.
 - Update `metadata.status` if the change constitutes a breaking API modification.
 - If adding a new relationship, use `common/ref`'s one shape: `{to: "<id>", rel: "<depends-on|extends|alternative-to|composes|...>"}` for something in this document's own graph, or `{href: "<url>", rel: "..."}` for something outside it.
+- To attach tool-specific data to one specific rule, use `$extensions` on that item — it's valid on individual `definitions`/`guidelines`/`steps` items, not just at the entry or section level.
 
 ## Schema References
 
@@ -59,5 +63,9 @@ When adding new sections or fields, verify the exact shape:
 ## Gotchas
 
 - Modifying `id` or `kind` is a breaking change — confirm with the user.
+- **Changing a `level` on a borrowed rule breaks validation.** If an item uses `refs: [{to: "...", rel: same-as}]`, its `level` must stay identical to the target's (`DSDS-10`). Change the shared rule and every borrower, or neither.
+- **Changing an `id` breaks every `to:` pointing at it.** A bare `to:` now resolves too (`DSDS-08`), and a `combo`'s `subject`/`items` resolve against real traits and tokens (`DSDS-09`) — renaming a trait can fail a combo elsewhere in the file.
+- Removing a `checks` ref from a `checkedBy: automated` guideline fails `DSDS-03`. Drop `checkedBy` down to `assisted`/`manual` in the same edit, or keep the pointer.
+- A guidelines section's field is **`framing`** (`when-to-use`/`how-to-use`). An older spec may still say `context` there — that's now a different, section-wide field taking `anatomy`/`terms`/`keyboard`/`events`.
 - DSDS doesn't track which props are "required" as a schema fact — that lives in the real source file `sourceFiles` points at. A new required prop is still a breaking change worth calling out in a `guidelines` item, just not a field to flip in the spec itself.
 - Token references (in `traits`, `combos`, or prose) must match `id`s of tokens actually documented in `tokens/`.

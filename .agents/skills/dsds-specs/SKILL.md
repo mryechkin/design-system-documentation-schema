@@ -25,11 +25,7 @@ When you need precise field-level details beyond this skill, consult these in or
    repo itself.
 4. **GitHub source** (split schema + examples): https://github.com/somerandomdude/design-system-documentation-schema/tree/main/schema
 
-Key pages for field-level detail:
-
-- Entry docs: https://designsystemdocspec.org/entries-component, `/entries-token`, `/entries-theme`, `/entries-system`, `/entries-entry`
-- Section docs: https://designsystemdocspec.org/sections-definitions, `/sections-guidelines`, `/sections-steps`, `/sections-section`
-- Shared shapes: https://designsystemdocspec.org/common-ref (the one pointer type), `/common-combo`, `/common-example`
+The site is four pages: `index.html`, `quickstart.html`, `extending.html`, `schema.html`. Every schema definition lives on `schema.html` under an anchor named `<directory>-<filename>` — `schema.html#entries-component`, `schema.html#sections-guidelines`, `schema.html#common-ref`. There is **no** per-definition page; a URL like `/entries-component` or `/sections-guidelines` is dead.
 
 ## Entry Kinds
 
@@ -42,6 +38,16 @@ Key pages for field-level detail:
 | `entry` (generic, or a namespaced custom kind like `acme.icon-library`) | Anything else — a foundation, a pattern, a guide. Organize by folder for clarity even though the schema `kind` is uniform. | `foundations/`, `patterns/`, `guides/`, etc. |
 
 There is no `token-group` kind: a group of related tokens is a `metadata.group` fact on the tokens in it, not a separate artifact.
+
+## The Entry Envelope
+
+Every entry kind shares one open base — learn it once and it generalizes:
+
+```
+id, kind, name, description, purpose, metadata, related, extends, refs, sections, $extensions
+```
+
+Only the kind-specific fields beyond that envelope differ: a token's `tokenType`/`source`, a component's `sourceFiles`/`specs`/`imports`/`traits`/`combos`, a theme's `colorScheme`. `sections/section.schema.yaml` plays the same role one level down: every section kind shares `kind`, `for`, `title`, `description`, `context`, `items`, `freeform`, `metadata`, `$extensions`.
 
 ## Document Structure
 
@@ -82,24 +88,84 @@ Splitting a system across many files uses `refs` (`rel: file`) pointing at sibli
 Every entry's structured docs live in one `sections` array. Each section has a `kind` and a `for` (`human`, `agent`, or `all`, naming its audience):
 
 - **`definitions`** — term/definition pairs. Use for anatomy, naming conventions, or a prop/event list when there's no real source file to extract from.
-- **`guidelines`** — a `statement` paired with a `level` (`must`/`should`/`should-not`/`must-not`/`may`). Carries `context: when-to-use` (a fit judgment) or `how-to-use` (the default, an implementation rule).
+- **`guidelines`** — a `statement` paired with a `level` (`must`/`should`/`should-not`/`must-not`/`may`). Carries `framing: when-to-use` (a fit judgment) or `how-to-use` (the default, an implementation rule).
 - **`steps`** — an ordered procedure or unordered checklist.
 - **`section`** (generic) — for anything else, or purely `freeform` narrative prose.
 
 Every section kind can also carry `freeform`: headed, nestable prose alongside its own structured `items`.
 
+### `context` — what job a section is doing
+
+Any section kind can set `context` to make its job machine-readable, instead of leaving it to a human-written `title` nothing validates: `anatomy`, `terms`, `keyboard`, `events`, or a namespaced custom value (`acme.slots`). Prefer this over titling a `definitions` section "Anatomy" and hoping a renderer matches on the heading.
+
+```yaml
+sections:
+  - kind: definitions
+    for: all
+    context: keyboard
+    title: Keyboard interactions
+    items:
+      - term: Space
+        definition: Activates the button.
+```
+
+Don't confuse it with `guidelines`' own `framing` field (`when-to-use`/`how-to-use`), which is a different idea on one specific kind.
+
+### Guidelines items
+
+A guidelines item is `{level, statement}` plus optional `id`, `example`, `alternatives`, `evidence`, `related`, `checks`, `checkedBy`, and `$extensions`. `checkedBy` is `automated`/`assisted`/`manual`; `checkedBy: automated` **requires** a `checks` (or `refs`) pointer with `rel: test` or `rel: lint-rule` — that's `DSDS-03`.
+
+An item can borrow its `statement` from a shared item instead of restating it: `refs: [{to: "shared-a11y#touch-target", rel: same-as}]`. It still declares its own `level`, and that `level` **must match the target's** (`DSDS-10`).
+
 ## A Component's Own Fields
 
 Not sections — facts about the component as a build artifact:
 
-- **`sourceFiles`** — one entry per platform, pointing a tool at the real file to extract the API from. Prefer this over hand-typing props in a `definitions` section.
+- **`sourceFiles`** — one entry per platform, pointing a tool at the real file to extract the API **from** (`./src/Button.tsx`). Prefer this over hand-typing props in a `definitions` section. At most one entry per platform (`DSDS-01`).
+- **`specs`** — a list of refs (`rel: contract`) to an already-generated API contract **document**: a W3C Custom Elements Manifest, a DS Contracts file, or similar. One step later in the pipeline than `sourceFiles`. DSDS never parses the target, so any standard format works.
 - **`imports`** — one entry per platform: install package + import statement.
 - **`traits`** — every variant (`kind: enum`) and state (`kind: boolean`) the component can be in.
-- **`combos`** — pairing rules between traits, tokens, or entries (e.g. "loading and disabled must not both be set").
+- **`combos`** — pairing rules between traits, tokens, or entries (e.g. "loading and disabled must not both be set"). A combo's `subject`/`items` must resolve against real traits, tokens, or entries (`DSDS-09`).
+
+### `traits[].setBy`
+
+`kind` (`boolean`/`enum`) doesn't say who sets a trait — a boolean can be either. `setBy` does, and it's the field that matters most for codegen:
+
+- **`consumer`** — the caller chooses it (`size`, `variant`, `disabled`). Becomes a prop.
+- **`component`** — the component sets it on its own (`hover`, `loading`); the caller only observes it. **Never** becomes a prop.
+
+```yaml
+traits:
+  - kind: enum
+    id: variant
+    description: Which visual style to render.
+    setBy: consumer
+    values:
+      - id: primary
+        description: The default, high-emphasis style for the main action.
+      - id: secondary
+        description: A lower-emphasis alternative.
+  - kind: boolean
+    id: hover
+    description: The pointer is over the control.
+    setBy: component
+```
+
+Every trait needs its own `description`, and so does every enum `value`.
 
 ## Agent-Only Sections
 
 Mark a section `for: agent` for firm, ready-to-act notes a person wouldn't need — hard MUST/MUST NOT rules, notes that keep an agent from confusing this entry with a similar one, checks an agent can run against its own output. Tools never surface these to people. It must extend the human-facing sections on the same entry, never contradict or repeat them.
+
+## Going Beyond the Shipped Fields
+
+Three mechanisms, in order of reach — see https://designsystemdocspec.org/extending.html:
+
+- **`$extensions`** — namespaced tool data (`com.figma:`), valid on the document, an entry, a section, **and on individual `definitions`/`guidelines`/`steps` items and `freeform` entries**. Use when you need to attach data to one specific rule.
+- **A custom kind** — a namespaced `kind` (`acme.icon-library` on an entry, `acme.slots` on a section) when the document wants its own recognizable name. Validated against the open base.
+- **A profile** — a file at `profiles/entries/<kind>.schema.yaml` or `profiles/sections/<kind>.schema.yaml` that **narrows** a built-in kind (makes its optional fields required) without forking it. A profile may narrow; it must not extend. Picked up automatically by the validator, never bundled into the published schema.
+
+Before reaching for any of them, check the "Things people often want to add" list on that page — a prop table, an anatomy diagram, a `token-group` kind, and typed accessibility fields are deliberate absences with an intended answer, not gaps.
 
 ## Schema Validation
 
@@ -113,19 +179,23 @@ See the `dsds-validate` skill for the full rule catalog (`DSDS-01`–`DSDS-23`) 
 
 ## Deep-Dive References
 
-Fetch these pages when authoring specific pieces:
+Every definition is on one page. Fetch the anchor:
 
 | Topic | Reference |
 | --- | --- |
-| Component (sourceFiles, imports, traits, combos) | https://designsystemdocspec.org/entries-component |
-| Token | https://designsystemdocspec.org/entries-token |
-| Theme | https://designsystemdocspec.org/entries-theme |
-| System | https://designsystemdocspec.org/entries-system |
-| Definitions section | https://designsystemdocspec.org/sections-definitions |
-| Guidelines section | https://designsystemdocspec.org/sections-guidelines |
-| Steps section | https://designsystemdocspec.org/sections-steps |
-| The one pointer type | https://designsystemdocspec.org/common-ref |
-| Metadata | https://designsystemdocspec.org/metadata-entry-metadata |
+| Component (sourceFiles, specs, imports, traits, combos) | https://designsystemdocspec.org/schema.html#entries-component |
+| Token | https://designsystemdocspec.org/schema.html#entries-token |
+| Theme | https://designsystemdocspec.org/schema.html#entries-theme |
+| System | https://designsystemdocspec.org/schema.html#entries-system |
+| Generic entry | https://designsystemdocspec.org/schema.html#entries-entry |
+| Section base (`for`, `context`, `freeform`) | https://designsystemdocspec.org/schema.html#sections-section |
+| Definitions section | https://designsystemdocspec.org/schema.html#sections-definitions |
+| Guidelines section | https://designsystemdocspec.org/schema.html#sections-guidelines |
+| Steps section | https://designsystemdocspec.org/schema.html#sections-steps |
+| The one pointer type | https://designsystemdocspec.org/schema.html#common-ref |
+| Combos | https://designsystemdocspec.org/schema.html#common-combo |
+| Metadata | https://designsystemdocspec.org/schema.html#metadata-entry-metadata |
+| How the schema is organized | https://designsystemdocspec.org/schema.html#how-the-schema-is-organized |
 
 ## Gotchas
 
@@ -134,3 +204,10 @@ Fetch these pages when authoring specific pieces:
 - Requirement levels: `must`, `should`, `should-not`, `must-not`, `may` (lowercase, hyphenated — RFC 2119).
 - `metadata.status` is always an object: `{status: "stable"}`, optionally scoped with `platform`, `since`, `deprecationNotice`, `note`. There's no bare-string shorthand.
 - All pointers — dependencies, composition, citations, external links — use one shape: `common/ref` (`to` for this document's own graph, `href` for outside it, plus a `rel`). There's no separate "relationship" or "link" type.
+- **`to:` is an id, not a display name.** It has a structural `pattern`: an id, optionally `#itemId`. `to: Button` or anything containing a space fails schema validation outright, with no rule id — it's a plain `pattern` failure.
+- **`metadata.tags[0]` is the entry's category** by convention; the rest are free-form tags.
+- **`metadata.group` groups any kind**, not just tokens — `color.action` on a set of tokens, `button` on a `button`/`icon-button` family. It's what replaced the deleted `token-group` kind.
+- A guideline with **no `statement`** is valid when it carries a `rel: same-as` or `rel: external-link` ref instead. The `external-link` form is deliberately unreadable without following the link; a renderer should show the level and the link, not treat it as empty.
+- Content **always** lives in a section's `items`, never in a field named after the kind (no `steps.steps`, no `definitions.definitions`).
+- Every section item is addressable even without an explicit `id`: a conforming consumer derives one from the item's own text (lowercase, non-alphanumeric runs collapsed to a dash).
+- **Don't put prose in a YAML flow mapping.** `{id: primary, description: The default, high-emphasis style}` parses as *three* keys — a flow mapping splits on every comma, including one inside a sentence. It surfaces as a baffling `must NOT have unevaluated properties` error. Use block style for anything with a `description`.

@@ -34,6 +34,12 @@ A second, separate tier (`DSDS-12`–`DSDS-23`) that answers "is this documentat
 | `must have required property 'id'/'kind'/'name'/'description'` | Every entry needs all four — add the missing field |
 | `must have required property 'entries'` | A base document (has `schemaVersion`) needs a non-empty `entries` array |
 | `must match pattern` (on `id`) | Use lowercase, dash-separated segments, optionally dot-chained (e.g. `color.action.primary`) |
+| `must match pattern` (on `to`) | `to:` takes an id, optionally `#itemId` — not a display name. `to: Button` and anything with a space fail. No rule id; it's a plain structural constraint |
+| `must contain at least one item with \`rel\` in [same-as, external-link]` | A `guidelines` item has no `statement`, so it needs a `same-as` or `external-link` ref to carry the rule instead |
+| `must be equal to one of the allowed values` (on a section field) | Check you're not using the old `context: how-to-use` — a guidelines section's field is **`framing`**; `context` now takes `anatomy`/`terms`/`keyboard`/`events` |
+| `[DSDS-01]` | Two `sourceFiles` entries share a `platform` (or two have none) — keep one per platform |
+| `[DSDS-02]` | A `platform` value isn't in the system entry's `metadata.platforms` — add it there or fix the typo |
+| `[DSDS-03]` | A `checkedBy: automated` guideline has no `checks`/`refs` with `rel: test`/`lint-rule` — add the pointer or drop to `assisted`/`manual` |
 | `[DSDS-04] id "..." is declared more than once` | Two entries (or an entry and a `shared` item) share an `id` — rename one |
 | `[DSDS-05] ... targets unknown entry/shared / unknown item` | A ref's `to: "entryId#itemId"` doesn't resolve — check the target `id` and item `id` both exist |
 | `[DSDS-06]`/`[DSDS-07]` cycle | A `composes` or `depends-on` ref chain loops back on itself — break the cycle |
@@ -45,7 +51,11 @@ A second, separate tier (`DSDS-12`–`DSDS-23`) that answers "is this documentat
 1. Run `npx dsds-validate <files-or-globs>`
 2. If errors, fix the first reported file
 3. Re-run validation
-4. Repeat until all pass
+4. Repeat until all pass, then run `validate:strict` and clear the warnings too
+
+## Passing Isn't the Same as Good
+
+Validation checks structure, not quality. A document can be fully conformant and still be bad documentation — see `examples/anti-patterns/` upstream for three that validate cleanly: a definition that only restates its own term, an unfalsifiable `checkedBy: manual` claim, and prose naming a concept the spec doesn't have. Read a spec after it passes, don't just ship it.
 
 ## Schema Sources
 
@@ -54,7 +64,7 @@ The validation schema comes from the [DSDS project](https://github.com/somerando
 - **Bundled schema** (used by `dsds-validate`): `https://designsystemdocspec.org/v0.20.1/dsds.bundled.schema.json`, or `node_modules/design-system-documentation-schema/schema/dsds.bundled.schema.json` if installed as a dependency
 - This is a single-file version with every schema file's own `$id` still present, so `$ref`s resolve without needing to be inlined
 
-If validation fails on a field you're unsure about, consult the relevant docs page:
+If a project narrows a built-in kind with a **profile** (`profiles/entries/<kind>.schema.yaml`), the validator picks it up automatically and uses it instead of the built-in — so a failure naming a field the published schema calls optional may be coming from a local profile. Check `profiles/` before assuming the error is wrong.
 
 - https://designsystemdocspec.org/schema#how-the-schema-is-organized (how the schema is organized)
 - https://designsystemdocspec.org/conformance (full rule catalog and conformance classes)
@@ -65,3 +75,4 @@ If validation fails on a field you're unsure about, consult the relevant docs pa
 
 - After creating or modifying any `.dsds.yaml` file
 - Before committing changes
+- In CI, with `--strict`

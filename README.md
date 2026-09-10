@@ -86,6 +86,7 @@ That page is generated from [STYLE_GUIDE.md](STYLE_GUIDE.md), so edit the root f
 - **`test/site-components/`** — A regression corpus documenting this repo's own `site/components/` web components as DSDS entries (dogfooding), checked on every `npm run check`.
 - **`scripts/`** — Bundling, validation, composition, and the static site generator.
 - **`site/`** — The spec site source (`content/*.mdx`, `templates/`, `components/`). Its build output lands in `site/dist/`, which is git-ignored apart from the immutable versioned `v<n>/` archives.
+- **`.agents/skills/dsds-*`** — Four agent skills an adopting project can vendor into its own repo, so an agent authoring specs there has the current model without fetching this site: `dsds-specs` (the reference), `dsds-add`, `dsds-update`, and `dsds-validate`. `npm run bump-version` syncs their version references; their *content* is maintained by hand.
 
 ## Quick Start
 
@@ -138,6 +139,8 @@ git push && git push origin v0.20.1
 Use `npm run bump-version <version> -- --dry-run` to preview changes first, or `--help` for the rest of the flags.
 
 The versioned dist directories (`site/dist/v<n>/dsds.bundled.schema.json` and `dsds.bundled.yaml`) are **immutable public contracts**. Older `v<n>/` directories must stay untouched, and they are the one part of `site/dist/` that is tracked in git. `scripts/site/build-site.js` preserves them across rebuilds and never regenerates an older one, so nothing else would put them back.
+
+`sync-skill-versions` rewrites version *strings* in `.agents/skills/dsds-*` and nothing else. A schema change that renames a field or moves a page will leave those files stamped with the new version and still describing the old shape — with nothing to flag it, since no test reads them. Re-read them by hand whenever a change would alter what an author writes.
 
 Tag every release (`vX.Y.Z`, pushed to the remote) once its commit is merged — a released version with no tag is indistinguishable from a work-in-progress one to anything that resolves "latest" by walking tags (`dsds-mcp`'s staleness check is one real example). Releases through v0.15.2 did this consistently; if the working tree is currently untagged past that point, tag it before cutting anything new so tag history stops having a gap.
 

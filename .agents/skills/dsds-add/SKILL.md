@@ -47,27 +47,74 @@ sourceFiles:
   - platform: <react|web-component|...>
     file: <path to the real source file>
 
+# Optional: an already-generated API contract (Custom Elements Manifest,
+# DS Contracts, ...) - one step past sourceFiles, not a replacement for it.
+specs:
+  - rel: contract
+    href: <./contracts/<id>.contract.json>
+    role: <format name>
+
 imports:
   - platform: <react|web-component|...>
     code: <import statement, written out>
     package: <package name>
 
+traits:
+  - kind: enum
+    id: <variant>
+    description: <what this dimension of variation controls>
+    setBy: consumer
+    values:
+      - id: <value>
+        description: <what it's for>
+  - kind: boolean
+    id: <loading>
+    description: <what this state means>
+    setBy: component
+
 sections:
   - kind: guidelines
     for: all
-    context: how-to-use
-    items: []
+    framing: how-to-use
+    items:
+      - level: must
+        statement: <one concrete rule>
 ```
 
 ## Sections to Include (Components)
 
-Include at minimum: a `guidelines` section (`context: how-to-use`) covering usage rules and accessibility requirements. Add `traits` (top-level, not a section) for variants/states, a `guidelines` section with `context: when-to-use` for fit judgments, and a `definitions` section for props/anatomy only when there's no real source file to point `sourceFiles` at instead. Add a `for: agent` section for firm rules an agent needs but a person wouldn't.
+Include at minimum: a `guidelines` section (`framing: how-to-use`) covering usage rules and accessibility requirements. Add `traits` (top-level, not a section) for variants/states, a `guidelines` section with `framing: when-to-use` for fit judgments, and a `definitions` section for props/anatomy only when there's no real source file to point `sourceFiles` at instead. Add a `for: agent` section for firm rules an agent needs but a person wouldn't.
 
 ## Extraction Guidelines
 
-- **From code**: Point `sourceFiles` at the real file instead of hand-typing props — that's the whole point of the field. Map variant/state props → `traits` (`kind: enum` or `kind: boolean`). Map CSS parts or named sub-elements → a `definitions` section titled "Anatomy".
-- **From Figma**: Map component properties → `traits`, layer structure → a `definitions` section, variable bindings → token `refs`.
-- **From requirements**: Map acceptance criteria → `guidelines` items (`level` from RFC 2119: `must`/`should`/`should-not`/`must-not`/`may`), interaction requirements → a `definitions` section titled "Keyboard interactions" (term = key, definition = action).
+- **From code**: Point `sourceFiles` at the real file instead of hand-typing props — that's the whole point of the field. Map variant/state props → `traits` (`kind: enum` or `kind: boolean`), and set `setBy: consumer` for anything the caller passes in, `setBy: component` for anything the component sets on its own (`hover`, `loading`). Map CSS parts or named sub-elements → a `definitions` section with `context: anatomy`.
+- **From Figma**: Map component properties → `traits`, layer structure → a `definitions` section with `context: anatomy`, variable bindings → token `refs`.
+- **From requirements**: Map acceptance criteria → `guidelines` items (`level` from RFC 2119: `must`/`should`/`should-not`/`must-not`/`may`), interaction requirements → a `definitions` section with `context: keyboard` (term = key, definition = action).
+
+Set `context` rather than relying on a `title` alone — `anatomy`, `terms`, `keyboard`, `events` are the well-known values, and they're what makes a section's job machine-readable. A `title` is still fine alongside it, for people.
+
+## Writing Guidelines That Are Actually Checkable
+
+- Give a rule `checkedBy` (`automated`/`assisted`/`manual`) when you know how it's verified.
+- `checkedBy: automated` **requires** a `checks` pointer at the thing that runs it, or validation fails (`DSDS-03`):
+
+  ```yaml
+  - level: must
+    statement: The control meets a 44×44px minimum touch target.
+    checkedBy: automated
+    checks:
+      - href: ./tests/button.a11y.test.ts
+        rel: test
+  ```
+
+- To reuse a rule declared once on a shared entry, borrow it instead of restating it — and keep `level` identical to the target's, or `DSDS-10` fails:
+
+  ```yaml
+  - level: must
+    refs: [{to: "shared-a11y#touch-target", rel: same-as}]
+  ```
+
+Before finishing, read `examples/anti-patterns/` upstream — three documents that validate cleanly and are still bad. The failure modes it catalogs (a definition that only restates its own term, a `checkedBy: manual` claim too vague to check, prose naming a concept the spec doesn't have) are the ones validation cannot catch for you.
 
 ## Schema References
 
@@ -81,6 +128,10 @@ When unsure about field shapes or required properties, consult:
 ## Gotchas
 
 - `id` must match the filename (e.g. `checkbox` → `checkbox.dsds.yaml`).
-- A component's `sourceFiles`, `imports`, `traits`, and `combos` are top-level fields on the entry, never inside a section.
+- A component's `sourceFiles`, `specs`, `imports`, `traits`, and `combos` are top-level fields on the entry, never inside a section.
 - Use RFC 2119 levels in guidelines: `must`, `should`, `should-not`, `must-not`, `may`.
 - `metadata.status` is always an object (`{status: "draft"}`), never a bare string.
+- A guidelines section's field is **`framing`** (`when-to-use`/`how-to-use`). `context` is a different, section-wide field (`anatomy`/`terms`/`keyboard`/`events`).
+- `to:` takes an id, optionally `#itemId` — never a display name. `to: Button` fails schema validation on a `pattern`.
+- At most one `sourceFiles` entry per platform (`DSDS-01`), and every `platform` value must appear in the system entry's `metadata.platforms` once that list exists (`DSDS-02`).
+- A component with no `sourceFiles` is valid — documenting something designed but not yet built is supported, not a gap.
